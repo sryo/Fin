@@ -5,16 +5,16 @@ import SwiftUI
 @Model
 final class Category {
     var name: String
-    var emoji: String
+    var icon: String  // SF Symbol name
     var colorHex: String
     var keywords: String
 
     @Relationship(deleteRule: .nullify, inverse: \Expense.category)
     var expenses: [Expense]?
 
-    init(name: String, emoji: String, colorHex: String, keywords: String = "") {
+    init(name: String, icon: String, colorHex: String, keywords: String = "") {
         self.name = name
-        self.emoji = emoji
+        self.icon = icon
         self.colorHex = colorHex
         self.keywords = keywords
     }
@@ -79,6 +79,17 @@ extension Double {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.locale = Locale(identifier: "es_AR")
+        return formatter.string(from: NSNumber(value: self)) ?? "$\(self)"
+    }
+
+    var currencyFormattedCompact: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "es_AR")
+        // Omit cents if whole number
+        if self.truncatingRemainder(dividingBy: 1) == 0 {
+            formatter.maximumFractionDigits = 0
+        }
         return formatter.string(from: NSNumber(value: self)) ?? "$\(self)"
     }
 }

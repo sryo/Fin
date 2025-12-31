@@ -110,11 +110,11 @@ struct UnifiedAddView: View {
 
     private var headerView: some View {
         HStack(spacing: 0) {
-            Text(totalSpending.currencyFormatted)
-                .font(.system(size: 32, weight: .bold))
+            Text(totalSpending.currencyFormattedCompact)
+                .font(.system(size: 26, weight: .bold))
 
             Text(" en ")
-                .font(.system(size: 32, weight: .light))
+                .font(.system(size: 26, weight: .light))
                 .foregroundStyle(.secondary)
 
             monthPicker
@@ -150,7 +150,7 @@ struct UnifiedAddView: View {
         let monthName = formatter.string(from: month).capitalized
 
         return Text(monthName)
-            .font(.system(size: 24, weight: isSelected ? .medium : .light))
+            .font(.system(size: 20, weight: isSelected ? .medium : .light))
             .foregroundStyle(isSelected ? .primary : .secondary)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -425,33 +425,48 @@ struct UnifiedAddView: View {
         let scaledImage = scaleImageForOCR(image)
         guard let cgImage = scaledImage.cgImage else { return }
 
+        // Run Vision OCR for fallback text
         let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .fast // Faster, avoids timeout
+        request.recognitionLevel = .fast
         request.recognitionLanguages = ["es", "en"]
         request.usesLanguageCorrection = true
 
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
 
+        var ocrText = ""
         do {
             try handler.perform([request])
-
             if let observations = request.results {
-                let text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
-                await MainActor.run {
-                    applyOCRResults(text)
-                }
+                ocrText = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
             }
         } catch {
-            print("OCR failed: \(error)")
+            print("[OCR] Failed: \(error)")
+        }
+
+        print("[OCR] Extracted text (\(ocrText.count) chars):")
+        print(ocrText.prefix(500))
+
+        // Use unified parser with Donut + fallback
+        let parsed = await ReceiptParser.parse(
+            image: scaledImage,
+            text: ocrText,
+            categories: categories
+        )
+
+        await MainActor.run {
+            applyParsedReceipt(parsed)
         }
     }
 
     private func scaleImageForOCR(_ image: UIImage) -> UIImage {
+        // First, fix orientation (important for camera captures)
+        let fixedImage = fixImageOrientation(image)
+
         let maxDimension: CGFloat = 2000
-        let size = image.size
+        let size = fixedImage.size
 
         guard size.width > maxDimension || size.height > maxDimension else {
-            return image
+            return fixedImage
         }
 
         let scale = maxDimension / max(size.width, size.height)
@@ -459,8 +474,19 @@ struct UnifiedAddView: View {
 
         let renderer = UIGraphicsImageRenderer(size: newSize)
         return renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
+            fixedImage.draw(in: CGRect(origin: .zero, size: newSize))
         }
+    }
+
+    private func fixImageOrientation(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+
+        UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
+        image.draw(in: CGRect(origin: .zero, size: image.size))
+        let normalizedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+
+        return normalizedImage ?? image
     }
 
     private func processPDF(_ data: Data) async {
@@ -504,15 +530,20 @@ struct UnifiedAddView: View {
             }
         }
 
+        // Use unified parser with Donut + fallback
+        let parsed = await ReceiptParser.parse(
+            image: pendingImage,
+            text: fullText,
+            categories: categories
+        )
+
         await MainActor.run {
-            applyOCRResults(fullText)
+            applyParsedReceipt(parsed)
         }
     }
 
-    private func applyOCRResults(_ text: String) {
-        let parsed = ReceiptParser.parse(text: text, categories: categories)
-
-        // Only fill empty fields
+    private func applyParsedReceipt(_ parsed: ParsedReceipt) {
+        // Only fill empty fields to preserve user edits
         if amount.isEmpty, let parsedAmount = parsed.amount {
             amount = String(format: "%.2f", parsedAmount).replacingOccurrences(of: ".", with: ",")
         }
@@ -577,7 +608,7 @@ struct CategoryExpensesSheet: View {
                 }
             }
             .listStyle(.plain)
-            .navigationTitle("\(category.emoji) \(category.name)")
+            .navigationTitle(category.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -587,8 +618,12 @@ struct CategoryExpensesSheet: View {
                 }
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 0) {
-                        Text("\(category.emoji) \(category.name)")
-                            .font(.headline)
+                        HStack(spacing: 6) {
+                            Image(systemName: category.icon)
+                                .font(.subheadline)
+                            Text(category.name)
+                                .font(.headline)
+                        }
                         Text(totalForCategory.currencyFormatted)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -608,8 +643,9 @@ struct ExpenseRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(expense.category?.emoji ?? "📦")
+            Image(systemName: expense.category?.icon ?? "shippingbox.fill")
                 .font(.title2)
+                .foregroundStyle(expense.category?.color ?? .secondary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(expense.merchant ?? expense.notes ?? expense.category?.name ?? "Gasto")

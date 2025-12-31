@@ -160,24 +160,24 @@ struct TreemapCell: View {
     var isSelected: Bool = false
     var onTap: (() -> Void)?
 
-    private var showEmoji: Bool { rect.width > 40 && rect.height > 40 }
-    private var showAmount: Bool { rect.width > 60 && rect.height > 60 }
+    private var showIcon: Bool { rect.width > 40 && rect.height > 40 }
+    private var showAmount: Bool { rect.width > 60 && rect.height > 50 }
 
     var body: some View {
         RoundedRectangle(cornerRadius: 8)
             .fill(category.color.opacity(isSelected ? 1.0 : 0.85))
             .frame(width: max(0, rect.width - 2), height: max(0, rect.height - 2))
             .overlay {
-                if showEmoji {
-                    VStack(spacing: 2) {
-                        Text(category.emoji)
-                            .font(.system(size: min(28, rect.width / 3)))
+                if showIcon {
+                    VStack(spacing: 4) {
+                        Image(systemName: category.icon)
+                            .font(.system(size: min(24, rect.width / 3.5)))
+                            .foregroundStyle(contrastColor)
 
                         if showAmount {
-                            Text(amount.currencyFormatted)
-                                .font(.system(size: min(11, rect.width / 7), weight: .medium))
+                            Text(amount.currencyFormattedCompact)
+                                .font(.system(size: min(16, rect.width / 5), weight: .semibold))
                                 .foregroundStyle(contrastColor)
-                                .opacity(0.9)
                         }
                     }
                 }

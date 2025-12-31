@@ -3,6 +3,19 @@ import SwiftData
 
 @main
 struct FinApp: App {
+    init() {
+        // Preload Donut models in background for faster first receipt scan
+        Task.detached(priority: .background) {
+            do {
+                try await DonutInferenceService.shared.initialize()
+                print("[FinApp] Donut models preloaded successfully")
+            } catch {
+                // Models will be loaded on first use if preload fails
+                print("[FinApp] Donut preload failed (will load on demand): \(error.localizedDescription)")
+            }
+        }
+    }
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Expense.self,
@@ -38,19 +51,19 @@ struct FinApp: App {
 
 private func seedCategories(context: ModelContext) {
     let defaults: [(String, String, String, String)] = [
-        ("Vivienda", "🏠", "#4CAF50", "alquiler,expensas,luz,gas,agua,edenor,edesur,metrogas,aysa,aguas cordobesas,epec,electricidad"),
-        ("Comida", "🛒", "#FF9800", "supermercado,almacen,verduleria,carrefour,coto,dia,jumbo,disco,grido,helado,carniceria,pollo,cerdo,milanesa"),
-        ("Restaurantes", "🍽️", "#FFC107", "restaurant,bar,cafe,pizzeria,delivery,rappi,pedidosya,havanna,freddo,starbucks,antares,cerveza,brewery,cerveceria"),
-        ("Transporte", "🚌", "#2196F3", "nafta,combustible,sube,uber,taxi,cabify,ypf,shell,axion,pasajes"),
-        ("Entretenimiento", "🎬", "#9C27B0", "cine,teatro,streaming,spotify,netflix,disney,hbo,amazon,steam"),
-        ("Servicios", "📱", "#607D8B", "telefono,internet,celular,personal,claro,movistar,fibertel,telecentro,naranja,visa,mastercard,tarjeta,resumen,monotributo,afip,impuesto,santander,banco,transferencia,western union,remesa,envio,giro,multa,infraccion,municipalidad,brubank,pagofacil,pagomiscuentas"),
-        ("Salud", "💊", "#E91E63", "farmacia,medico,hospital,osde,swiss,prepaga,prevencion"),
-        ("Ropa", "👕", "#00BCD4", "ropa,zapatillas,shopping,zara,nike,adidas,corbata,chaleco,camisa,pantalon,zapato,traje"),
-        ("Otros", "📦", "#795548", ""),
+        ("Vivienda", "house.fill", "#4CAF50", "alquiler,expensas,luz,gas,agua,edenor,edesur,metrogas,aysa,aguas cordobesas,epec,electricidad"),
+        ("Comida", "cart.fill", "#FF9800", "supermercado,almacen,verduleria,carrefour,coto,dia,jumbo,disco,grido,helado,carniceria,pollo,cerdo,milanesa"),
+        ("Restaurantes", "fork.knife", "#FFC107", "restaurant,bar,cafe,pizzeria,delivery,rappi,pedidosya,havanna,freddo,starbucks,antares,cerveza,brewery,cerveceria"),
+        ("Transporte", "bus.fill", "#2196F3", "nafta,combustible,sube,uber,taxi,cabify,ypf,shell,axion,pasajes"),
+        ("Entretenimiento", "film.fill", "#9C27B0", "cine,teatro,streaming,spotify,netflix,disney,hbo,amazon,steam"),
+        ("Servicios", "iphone", "#607D8B", "telefono,internet,celular,personal,claro,movistar,fibertel,telecentro,naranja,visa,mastercard,tarjeta,resumen,monotributo,afip,impuesto,santander,banco,transferencia,western union,remesa,envio,giro,multa,infraccion,municipalidad,brubank,pagofacil,pagomiscuentas"),
+        ("Salud", "cross.case.fill", "#E91E63", "farmacia,medico,hospital,osde,swiss,prepaga,prevencion"),
+        ("Ropa", "tshirt.fill", "#00BCD4", "ropa,zapatillas,shopping,zara,nike,adidas,corbata,chaleco,camisa,pantalon,zapato,traje"),
+        ("Otros", "shippingbox.fill", "#795548", ""),
     ]
 
-    for (name, emoji, color, keywords) in defaults {
-        let category = Category(name: name, emoji: emoji, colorHex: color, keywords: keywords)
+    for (name, icon, color, keywords) in defaults {
+        let category = Category(name: name, icon: icon, colorHex: color, keywords: keywords)
         context.insert(category)
     }
 }

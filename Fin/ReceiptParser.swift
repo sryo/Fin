@@ -1,18 +1,180 @@
 import Foundation
 import NaturalLanguage
+import UIKit
 
 struct ParsedReceipt {
     var amount: Double?
     var merchant: String?
     var date: Date?
     var suggestedCategory: Category?
+    var confidence: ParseConfidence = .low
+}
+
+enum ParseConfidence: Int, Comparable {
+    case low = 0
+    case medium = 1
+    case high = 2  // Found near strong keywords like "TOTAL", "SU PAGO"
+
+    static func < (lhs: ParseConfidence, rhs: ParseConfidence) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
 }
 
 enum ReceiptParser {
-    static func parse(text: String, categories: [Category]) -> ParsedReceipt {
+    // Strong keywords that indicate high confidence for amount extraction
+    private static let strongKeywords = [
+        "total", "su pago", "a pagar", "importe total", "monto total",
+        "total a pagar", "tu total", "pagado", "cobrado"
+    ]
+
+    // MARK: - Primary Parser (Parallel Donut + Regex)
+
+    /// Parse receipt using both Donut ML and regex in parallel, then merge results
+    /// - Parameters:
+    ///   - image: Receipt image for Donut processing (optional)
+    ///   - text: OCR text for regex parsing
+    ///   - categories: Available categories for suggestion
+    /// - Returns: Merged parsed receipt data
+    static func parse(
+        image: UIImage?,
+        text: String,
+        categories: [Category]
+    ) async -> ParsedReceipt {
+        print("[ReceiptParser] Starting parallel parse, image: \(image != nil), text length: \(text.count)")
+
+        // Run regex immediately (fast)
+        let regexResult = parseWithRegex(text: text, categories: categories)
+        print("[ReceiptParser] Regex - amount: \(regexResult.amount ?? 0), confidence: \(regexResult.confidence), merchant: \(regexResult.merchant ?? "nil")")
+
+        // Run Donut in parallel if image available
+        var donutResult: ParsedReceipt?
+        if let image = image {
+            do {
+                donutResult = try await parseWithDonut(image: image, text: text, categories: categories)
+                print("[ReceiptParser] Donut - amount: \(donutResult?.amount ?? 0), merchant: \(donutResult?.merchant ?? "nil")")
+            } catch {
+                print("[ReceiptParser] Donut FAILED: \(error.localizedDescription)")
+            }
+        }
+
+        // Merge results
+        let merged = mergeResults(regex: regexResult, donut: donutResult, text: text, categories: categories)
+        print("[ReceiptParser] Merged - amount: \(merged.amount ?? 0), merchant: \(merged.merchant ?? "nil"), source: \(merged.confidence)")
+        return merged
+    }
+
+    // MARK: - Result Merging
+
+    private static func mergeResults(
+        regex: ParsedReceipt,
+        donut: ParsedReceipt?,
+        text: String,
+        categories: [Category]
+    ) -> ParsedReceipt {
         var result = ParsedReceipt()
 
-        result.amount = extractAmount(from: text)
+        // Amount: prefer high-confidence regex, otherwise use Donut if available
+        if regex.confidence >= .high, let regexAmount = regex.amount {
+            result.amount = regexAmount
+            result.confidence = .high
+        } else if let donutAmount = donut?.amount, donutAmount > 0 {
+            // Validate Donut amount against regex if both exist
+            if let regexAmount = regex.amount, regex.confidence >= .medium {
+                // If they're close (within 10%), trust regex with keywords
+                let ratio = regexAmount / donutAmount
+                if ratio > 0.9 && ratio < 1.1 {
+                    result.amount = regexAmount
+                    result.confidence = .high
+                } else {
+                    // Significant difference - prefer regex if it has keyword context
+                    result.amount = regex.confidence >= .medium ? regexAmount : donutAmount
+                    result.confidence = regex.confidence >= .medium ? regex.confidence : .medium
+                }
+            } else {
+                result.amount = donutAmount
+                result.confidence = .medium
+            }
+        } else {
+            result.amount = regex.amount
+            result.confidence = regex.confidence
+        }
+
+        // Merchant: prefer known merchant (regex), then Donut, then regex fallback
+        if let regexMerchant = regex.merchant, isKnownMerchant(regexMerchant) {
+            result.merchant = regexMerchant
+        } else if let donutMerchant = donut?.merchant, !donutMerchant.isEmpty {
+            result.merchant = donutMerchant
+        } else {
+            result.merchant = regex.merchant
+        }
+
+        // Date: prefer Donut (structured), fall back to regex
+        result.date = donut?.date ?? regex.date ?? Date()
+
+        // Category: merge search text from both sources
+        let searchText = [result.merchant, donut?.merchant, regex.merchant, text]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        result.suggestedCategory = suggestCategory(from: searchText, categories: categories)
+
+        return result
+    }
+
+    private static func isKnownMerchant(_ name: String) -> Bool {
+        let merchants = loadMerchants()
+        let lowercased = name.lowercased()
+        return merchants.contains { $0.name.lowercased() == lowercased }
+    }
+
+    /// Legacy synchronous method for backward compatibility
+    static func parse(text: String, categories: [Category]) -> ParsedReceipt {
+        return parseWithRegex(text: text, categories: categories)
+    }
+
+    // MARK: - Donut-based Parsing
+
+    private static func parseWithDonut(
+        image: UIImage,
+        text: String,
+        categories: [Category]
+    ) async throws -> ParsedReceipt {
+        let service = DonutInferenceService.shared
+
+        // Initialize if needed
+        if await !service.isReady {
+            try await service.initialize()
+        }
+
+        // Run inference with timeout
+        let donutResult = try await service.processReceiptWithTimeout(image)
+
+        var result = ParsedReceipt()
+
+        // Use Donut extracted values
+        result.amount = donutResult.total
+        result.merchant = donutResult.merchant
+        result.date = donutResult.date ?? Date()
+
+        // Suggest category based on extracted text
+        let searchText = [donutResult.merchant, donutResult.rawOutput, text]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+
+        result.suggestedCategory = suggestCategory(from: searchText, categories: categories)
+
+        return result
+    }
+
+    // MARK: - Regex-based Parsing
+
+    private static func parseWithRegex(text: String, categories: [Category]) -> ParsedReceipt {
+        var result = ParsedReceipt()
+
+        let (amount, confidence) = extractAmountWithConfidence(from: text)
+        result.amount = amount
+        result.confidence = confidence
         result.merchant = extractMerchant(from: text)
         result.date = extractDate(from: text) ?? Date()
         result.suggestedCategory = suggestCategory(from: text.lowercased(), categories: categories)
@@ -20,46 +182,67 @@ enum ReceiptParser {
         return result
     }
 
-    private static func extractAmount(from text: String) -> Double? {
+    private static func extractAmountWithConfidence(from text: String) -> (Double?, ParseConfidence) {
         // Clean OCR artifacts
         let cleaned = cleanOCRArtifacts(text)
 
-        // Patterns for currency formats - ordered by priority (most specific first)
-        let patterns = [
-            // Explicit total labels (Spanish variations)
+        // High-confidence patterns (explicit total labels)
+        let highConfidencePatterns = [
+            // Standard totals (various formats seen in receipts)
+            #"total[:\s]+\$?\s*([\d\s.,]+)"#,
             #"(?:tu\s*)?total\s*(?:a\s*pagar|final|es)?[:\s]*\$?\s*([\d\s.,]+)"#,
-            #"monto\s*total\s*(?:recibido|enviado)?[:\s]*\$?\s*([\d\s.,]+)"#,
-            #"(?:importe|monto)\s*(?:total|a\s*pagar|enviado)?[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"su\s*pago[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"suma\s*de\s*sus\s*pagos[:\s]*\$?\s*([\d\s.,]+)"#,
+            // Transfer/remittance (Western Union, etc.)
+            #"monto\s*total\s*recibido[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"monto\s*(?:a\s*)?enviar[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"monto\s*(?:de\s*)?env[ií]o[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"monto\s*enviado[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"cargo\s*por\s*env[ií]o[:\s]*\$?\s*([\d\s.,]+)"#,
+            // Digital wallets (Brubank, MercadoPago, etc.)
+            #"(?:enviaste|transferiste)[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"(?:recibiste|te\s*transfirieron)[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"transferencia\s*(?:exitosa|realizada)?[:\s]*\$?\s*([\d\s.,]+)"#,
+            // Bills / fines
+            #"importe\s*(?:de\s*la\s*multa)?[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"total\s*facturado[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"saldo\s*(?:total|actual|a\s*pagar)[:\s]*\$?\s*([\d\s.,]+)"#,
+            #"pago\s*m[ií]nimo[:\s]*\$?\s*([\d\s.,]+)"#,
+            // Generic
+            #"monto\s*(?:total|a\s*pagar)?[:\s]*\$?\s*([\d\s.,]+)"#,
+        ]
+
+        // Medium-confidence patterns
+        let mediumConfidencePatterns = [
             #"(?:total|subtotal|a\s*pagar|pagado|cobrado|presupuesto)[:\s]*\$?\s*([\d\s.,]+)"#,
-            #"(?:valor\s*de\s*la\s*factura|total\s*pagado)[:\s]*\$?\s*([\d\s.,]+)"#,
             #"cargo\s*(?:por\s*envío?|total)?[:\s]*\$?\s*([\d\s.,]+)"#,
-            // Large currency amounts with $ prefix
             #"\$\s*([\d]{1,3}(?:[.,]\d{3})+(?:[.,]\d{2})?)"#,
-            // Simple currency prefix
+        ]
+
+        // Low-confidence patterns (just currency symbol)
+        let lowConfidencePatterns = [
             #"\$\s*([\d\s.,]+)"#,
             #"(?:ars|ar\$|pesos)\s*([\d\s.,]+)"#,
         ]
 
-        // Try each pattern
-        for pattern in patterns {
-            let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
-            let range = NSRange(cleaned.startIndex..., in: cleaned)
-
-            // Get all matches and pick the last one (usually the final total)
-            var lastMatch: Double?
-            regex?.enumerateMatches(in: cleaned, options: [], range: range) { match, _, _ in
-                if let match = match,
-                   match.numberOfRanges > 1,
-                   let numRange = Range(match.range(at: 1), in: cleaned) {
-                    let numStr = String(cleaned[numRange])
-                    if let value = parseNumber(numStr), value > 0 {
-                        lastMatch = value
-                    }
-                }
+        // Try high-confidence patterns first
+        for pattern in highConfidencePatterns {
+            if let value = extractLastMatch(pattern: pattern, from: cleaned) {
+                return (value, .high)
             }
+        }
 
-            if let value = lastMatch {
-                return value
+        // Try medium-confidence patterns
+        for pattern in mediumConfidencePatterns {
+            if let value = extractLastMatch(pattern: pattern, from: cleaned) {
+                return (value, .medium)
+            }
+        }
+
+        // Try low-confidence patterns
+        for pattern in lowConfidencePatterns {
+            if let value = extractLastMatch(pattern: pattern, from: cleaned) {
+                return (value, .low)
             }
         }
 
@@ -81,8 +264,29 @@ enum ReceiptParser {
             }
         }
 
-        // Return the largest value (likely the total)
-        return values.max()
+        return (values.max(), .low)
+    }
+
+    private static func extractLastMatch(pattern: String, from text: String) -> Double? {
+        let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+        let range = NSRange(text.startIndex..., in: text)
+
+        var lastMatch: Double?
+        regex?.enumerateMatches(in: text, options: [], range: range) { match, _, _ in
+            if let match = match,
+               match.numberOfRanges > 1,
+               let numRange = Range(match.range(at: 1), in: text) {
+                let numStr = String(text[numRange])
+                if let value = parseNumber(numStr), value > 0 {
+                    lastMatch = value
+                }
+            }
+        }
+        return lastMatch
+    }
+
+    private static func extractAmount(from text: String) -> Double? {
+        return extractAmountWithConfidence(from: text).0
     }
 
     // Fix common OCR misreads

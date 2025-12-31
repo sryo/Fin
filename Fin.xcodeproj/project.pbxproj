@@ -15,6 +15,13 @@
 		F0000001000000000000000D /* UnifiedAddView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000002000000000000000D /* UnifiedAddView.swift */; };
 		F0000001000000000000000E /* CameraCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0000002000000000000000E /* CameraCaptureSheet.swift */; };
 		F0000001000000000000000F /* merchants.json in Resources */ = {isa = PBXBuildFile; fileRef = F0000002000000000000000F /* merchants.json */; };
+		F00000010000000000000010 /* DonutImagePreprocessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000010 /* DonutImagePreprocessor.swift */; };
+		F00000010000000000000011 /* DonutTokenizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000011 /* DonutTokenizer.swift */; };
+		F00000010000000000000012 /* DonutInferenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000012 /* DonutInferenceService.swift */; };
+		F00000010000000000000013 /* donut_vocab.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000013 /* donut_vocab.json */; };
+		F00000010000000000000014 /* donut_special_tokens.json in Resources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000014 /* donut_special_tokens.json */; };
+		F00000010000000000000015 /* DonutEncoder.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000015 /* DonutEncoder.mlpackage */; };
+		F00000010000000000000016 /* DonutDecoder.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = F00000020000000000000016 /* DonutDecoder.mlpackage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +33,13 @@
 		F0000002000000000000000D /* UnifiedAddView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedAddView.swift; sourceTree = "<group>"; };
 		F0000002000000000000000E /* CameraCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCaptureSheet.swift; sourceTree = "<group>"; };
 		F0000002000000000000000F /* merchants.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = merchants.json; sourceTree = "<group>"; };
+		F00000020000000000000010 /* DonutImagePreprocessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DonutImagePreprocessor.swift; sourceTree = "<group>"; };
+		F00000020000000000000011 /* DonutTokenizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DonutTokenizer.swift; sourceTree = "<group>"; };
+		F00000020000000000000012 /* DonutInferenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DonutInferenceService.swift; sourceTree = "<group>"; };
+		F00000020000000000000013 /* donut_vocab.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = donut_vocab.json; sourceTree = "<group>"; };
+		F00000020000000000000014 /* donut_special_tokens.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = donut_special_tokens.json; sourceTree = "<group>"; };
+		F00000020000000000000015 /* DonutEncoder.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = DonutEncoder.mlpackage; sourceTree = "<group>"; };
+		F00000020000000000000016 /* DonutDecoder.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = folder.mlpackage; path = DonutDecoder.mlpackage; sourceTree = "<group>"; };
 		F0000003000000000000000C /* Fin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Fin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -57,7 +71,14 @@
 				F00000020000000000000005 /* TreemapView.swift */,
 				F0000002000000000000000D /* UnifiedAddView.swift */,
 				F0000002000000000000000E /* CameraCaptureSheet.swift */,
+				F00000020000000000000010 /* DonutImagePreprocessor.swift */,
+				F00000020000000000000011 /* DonutTokenizer.swift */,
+				F00000020000000000000012 /* DonutInferenceService.swift */,
+				F00000020000000000000015 /* DonutEncoder.mlpackage */,
+				F00000020000000000000016 /* DonutDecoder.mlpackage */,
 				F0000002000000000000000F /* merchants.json */,
+				F00000020000000000000013 /* donut_vocab.json */,
+				F00000020000000000000014 /* donut_special_tokens.json */,
 				F0000002000000000000000B /* Assets.xcassets */,
 			);
 			path = Fin;
@@ -132,6 +153,8 @@
 			files = (
 				F0000001000000000000000B /* Assets.xcassets in Resources */,
 				F0000001000000000000000F /* merchants.json in Resources */,
+				F00000010000000000000013 /* donut_vocab.json in Resources */,
+				F00000010000000000000014 /* donut_special_tokens.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +171,11 @@
 				F00000010000000000000005 /* TreemapView.swift in Sources */,
 				F0000001000000000000000D /* UnifiedAddView.swift in Sources */,
 				F0000001000000000000000E /* CameraCaptureSheet.swift in Sources */,
+				F00000010000000000000010 /* DonutImagePreprocessor.swift in Sources */,
+				F00000010000000000000011 /* DonutTokenizer.swift in Sources */,
+				F00000010000000000000012 /* DonutInferenceService.swift in Sources */,
+				F00000010000000000000015 /* DonutEncoder.mlpackage in Sources */,
+				F00000010000000000000016 /* DonutDecoder.mlpackage in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
